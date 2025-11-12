@@ -46,6 +46,10 @@ export async function POST(request: Request) {
             throw new Error(`Belt number ${belt_no} is already in use. Please choose another belt number.`);
         }
 
+        // Get current time in Indonesia timezone (WIB = UTC+7)
+        const now = new Date();
+        const indonesiaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // Add 7 hours for WIB
+        
         const newPaging = await prisma.tb_paging.create({
             data: {
                 belt_no,
@@ -53,7 +57,8 @@ export async function POST(request: Request) {
                 name_passenger,
                 handle_by,
                 free_text,
-                status: status || 1
+                status: status || 1,
+                last_update: indonesiaTime
             }
         });
 
@@ -171,6 +176,10 @@ export async function PUT(request: Request) {
             throw new Error(`Belt number ${belt_no} is already in use. Please choose another belt number.`);
         }
 
+        // Get current time in Indonesia timezone (WIB = UTC+7)
+        const now = new Date();
+        const indonesiaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // Add 7 hours for WIB
+        
         await prisma.tb_paging.update({
             where: {id},
             data: {
@@ -179,7 +188,8 @@ export async function PUT(request: Request) {
                 name_passenger: name_passenger,
                 handle_by: handle_by,
                 free_text: free_text,
-                status: status !== undefined ? status : 0
+                status: status !== undefined ? status : 0,
+                last_update: indonesiaTime
             }
         });
 

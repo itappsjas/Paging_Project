@@ -8,25 +8,25 @@ datasource db {
 }
 
 model tb_paging {
-  id             Int      @id @default(autoincrement())
-  belt_no        String
-  flight_no      String
-  name_passenger String
-  last_update    DateTime @default(now())
-  handle_by      String
-  free_text      String
-  status         Int
+  id                   Int      @id @default(autoincrement())
+  belt_no              String
+  flight_no            String
+  name_passenger       String
+  last_update          DateTime @default(now())
+  handle_by            String
+  free_text            String
+  status               Int
 }
 
 model tb_paging_log {
-  id             Int      @id @default(autoincrement())
-  belt_no        String
-  flight_no      String
-  name_passenger String
-  last_update    DateTime @default(now())
-  handle_by      String
-  free_text      String
-  status         Int
+  id                   Int      @id @default(autoincrement())
+  belt_no              String
+  flight_no            String
+  name_passenger       String
+  last_update          DateTime @default(now())
+  handle_by            String
+  free_text            String
+  status               Int
 }
 
 model tb_user {

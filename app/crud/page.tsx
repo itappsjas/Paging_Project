@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   addPaging,
   deletePaging,
@@ -44,13 +44,22 @@ const Home = () => {
       status: number;
     }>
   >([]);
+
+  // Internal state untuk 3 textarea (tidak disimpan terpisah di DB)
+  const [textIndonesia, setTextIndonesia] = useState("");
+  const [textSecond, setTextSecond] = useState(""); // Bahasa kedua (bisa pilih)
+  const [textThird, setTextThird] = useState(""); // Bahasa ketiga (bisa pilih)
+  const [secondLanguage, setSecondLanguage] = useState("English"); // Bahasa kedua
+  const [thirdLanguage, setThirdLanguage] = useState("Mandarin"); // Bahasa ketiga
+  const [enableThirdLanguage, setEnableThirdLanguage] = useState(true); // Toggle bahasa ketiga
+
   const [form, setForm] = useState({
     id: 0,
     belt_no: "",
     flight_no: "",
     name_passenger: "",
     handle_by: "",
-    free_text: "",
+    free_text: "", // Format: "ID | LANG2 | LANG3" atau "ID | LANG2"
     status: 0,
   });
 
@@ -72,6 +81,10 @@ const Home = () => {
   const [flightNoOptions, setFlightNoOptions] = useState<string[]>([]);
   const [showFlightNoList, setShowFlightNoList] = useState(false);
 
+  //state untuk auto-translate feature
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState("");
+
   //fungsi helper untuk menampilkan success message
   const showSuccessMessage = (message: string) => {
     setSuccessMessage(message);
@@ -86,6 +99,103 @@ const Home = () => {
     setApiError(message);
     setSuccessMessage(""); // Clear any success message
   };
+
+  //fungsi untuk auto-translate dari Indonesia ke bahasa lain
+  const handleAutoTranslate = useCallback(
+    async (
+      indonesianText: string,
+      lang2: string,
+      lang3: string,
+      enableLang3: boolean
+    ) => {
+      if (!indonesianText.trim()) {
+        // Clear translations if Indonesian text is empty
+        setTextSecond("");
+        setTextThird("");
+        return;
+      }
+
+      setIsTranslating(true);
+      setTranslationError("");
+
+      try {
+        // Translate to Second Language
+        const secondLangResponse = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: indonesianText,
+            targetLanguage: lang2,
+          }),
+        });
+
+        if (!secondLangResponse.ok) {
+          throw new Error("Translation to second language failed");
+        }
+
+        const secondLangData = await secondLangResponse.json();
+        setTextSecond(secondLangData.translatedText);
+
+        // Translate to Third Language (if enabled)
+        if (enableLang3) {
+          const thirdLangResponse = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: indonesianText,
+              targetLanguage: lang3,
+            }),
+          });
+
+          if (thirdLangResponse.ok) {
+            const thirdLangData = await thirdLangResponse.json();
+            setTextThird(thirdLangData.translatedText);
+          }
+        } else {
+          setTextThird(""); // Clear if disabled
+        }
+      } catch (error) {
+        console.error("Translation error:", error);
+        setTranslationError("Auto-translate gagal. Silakan isi manual.");
+      } finally {
+        setIsTranslating(false);
+      }
+    },
+    []
+  );
+
+  // Debounce auto-translate (tunggu 1 detik setelah user berhenti mengetik)
+  useEffect(() => {
+    if (!textIndonesia) return;
+
+    const timeoutId = setTimeout(() => {
+      handleAutoTranslate(
+        textIndonesia,
+        secondLanguage,
+        thirdLanguage,
+        enableThirdLanguage
+      );
+    }, 1000); // 1 second delay
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    textIndonesia,
+    secondLanguage,
+    thirdLanguage,
+    enableThirdLanguage,
+    handleAutoTranslate,
+  ]);
+
+  // Sync free_text dengan format: "ID | LANG2" atau "ID | LANG2 | LANG3"
+  useEffect(() => {
+    let combined = "";
+    if (enableThirdLanguage) {
+      combined = `${textIndonesia} | ${textSecond} | ${textThird}`;
+    } else {
+      combined = `${textIndonesia} | ${textSecond}`;
+    }
+    setForm((prev) => ({ ...prev, free_text: combined }));
+  }, [textIndonesia, textSecond, textThird, enableThirdLanguage]);
 
   //prepare function for form validation
   const validateForm = () => {
@@ -116,9 +226,15 @@ const Home = () => {
       newErrors.handle_by = "Handle By is required";
     }
 
-    // Check if Free Text is empty
-    if (!form.free_text.trim()) {
-      newErrors.free_text = "Free Text is required";
+    // Check if any language text is empty
+    if (!textIndonesia.trim()) {
+      newErrors.free_text = "Free Text (Indonesia) is required";
+    }
+    if (!textSecond.trim()) {
+      newErrors.free_text = `Free Text (${secondLanguage}) is required`;
+    }
+    if (enableThirdLanguage && !textThird.trim()) {
+      newErrors.free_text = `Free Text (${thirdLanguage}) is required`;
     }
 
     // Check for duplicate belt number in the client side (optional, server will also check)
@@ -198,7 +314,24 @@ const Home = () => {
     free_text: string;
     status: number;
   }) => {
-    setForm(paging);
+    // Parse free_text: "ID | LANG2" or "ID | LANG2 | LANG3"
+    const parts = paging.free_text.split(" | ");
+    setTextIndonesia(parts[0] || "");
+    setTextSecond(parts[1] || "");
+    setTextThird(parts[2] || "");
+
+    // Enable third language if there are 3 parts
+    setEnableThirdLanguage(parts.length >= 3);
+
+    setForm({
+      id: paging.id,
+      belt_no: paging.belt_no,
+      flight_no: paging.flight_no,
+      name_passenger: paging.name_passenger,
+      handle_by: paging.handle_by,
+      free_text: paging.free_text,
+      status: paging.status,
+    });
   };
 
   //=============DELETE DATA
@@ -264,6 +397,9 @@ const Home = () => {
         free_text: "",
         status: 0,
       });
+      setTextIndonesia("");
+      setTextSecond("");
+      setTextThird("");
       //refresh data pada table
       fetchPagings();
     } catch (err: unknown) {
@@ -631,7 +767,10 @@ const Home = () => {
                       try {
                         const today = new Date();
                         const yyyy = today.getFullYear();
-                        const mm = String(today.getMonth() + 1).padStart(2, "0");
+                        const mm = String(today.getMonth() + 1).padStart(
+                          2,
+                          "0"
+                        );
                         const dd = String(today.getDate()).padStart(2, "0");
                         const date = `${yyyy}-${mm}-${dd}`;
                         const resp = await fetch(
@@ -655,7 +794,10 @@ const Home = () => {
                       try {
                         const today = new Date();
                         const yyyy = today.getFullYear();
-                        const mm = String(today.getMonth() + 1).padStart(2, "0");
+                        const mm = String(today.getMonth() + 1).padStart(
+                          2,
+                          "0"
+                        );
                         const dd = String(today.getDate()).padStart(2, "0");
                         const date = `${yyyy}-${mm}-${dd}`;
                         const resp = await fetch(
@@ -671,7 +813,9 @@ const Home = () => {
                         }
                       } catch {}
                     }}
-                    onBlur={() => setTimeout(() => setShowFlightNoList(false), 150)}
+                    onBlur={() =>
+                      setTimeout(() => setShowFlightNoList(false), 150)
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Escape") setShowFlightNoList(false);
                     }}
@@ -779,53 +923,79 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Second Row: Passenger Name and Default Text */}
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              {/* Passenger Name */}
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Passenger Name <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  placeholder="Enter passenger name(s)"
-                  rows={4}
-                  className="px-4 py-2.5 bg-slate-700/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 resize-none"
-                  value={form.name_passenger}
-                  onChange={(e) =>
-                    setForm({ ...form, name_passenger: e.target.value })
-                  }
-                />
-                {error.name_passenger && (
-                  <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                    <svg
-                      className="w-3 h-3"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>{error.name_passenger}</span>
-                  </p>
-                )}
-              </div>
+            {/* Second Row: Passenger Name */}
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Passenger Name <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                placeholder="Enter passenger name(s)"
+                rows={4}
+                className="px-4 py-2.5 bg-slate-700/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 resize-none"
+                value={form.name_passenger}
+                onChange={(e) =>
+                  setForm({ ...form, name_passenger: e.target.value })
+                }
+              />
+              {error.name_passenger && (
+                <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+                  <svg
+                    className="w-3 h-3"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>{error.name_passenger}</span>
+                </p>
+              )}
+            </div>
 
-              {/* Default Text */}
-              <div className="flex flex-col">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Default Text <span className="text-red-400">*</span>
-                </label>
+            {/* Info Box for Auto-Translate */}
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-4 py-3 flex items-start gap-3">
+              <svg
+                className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm text-cyan-200 font-medium">
+                  🤖 Auto-Translate Active
+                </p>
+                <p className="text-xs text-cyan-300/80 mt-1">
+                  Type in <strong>Indonesian</strong>, automatically translated
+                  to <strong>English</strong> and{" "}
+                  <strong>selected language</strong>. You can edit manually if
+                  needed.
+                </p>
+              </div>
+            </div>
+
+            {/* Third Row: Multi-Language Text Fields */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {/* Indonesian Text */}
+              <div className="flex flex-col h-full">
+                <div className="min-h-[52px] flex items-start mb-2">
+                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    🇮🇩 Text (Indonesia) <span className="text-red-400">*</span>
+                  </label>
+                </div>
                 <textarea
-                  placeholder="Enter paging message"
+                  placeholder="Enter paging message in Indonesian"
                   rows={4}
                   className="px-4 py-2.5 bg-slate-700/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 resize-none"
-                  value={form.free_text}
-                  onChange={(e) =>
-                    setForm({ ...form, free_text: e.target.value })
-                  }
+                  value={textIndonesia}
+                  onChange={(e) => setTextIndonesia(e.target.value)}
                 />
                 {error.free_text && (
                   <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
@@ -843,6 +1013,134 @@ const Home = () => {
                     <span>{error.free_text}</span>
                   </p>
                 )}
+                {translationError && (
+                  <p className="text-xs text-yellow-400 mt-1.5 flex items-center gap-1">
+                    <svg
+                      className="w-3 h-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <span>{translationError}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Second Language Text with Dropdown */}
+              <div className="flex flex-col h-full">
+                <div className="min-h-[52px] flex flex-col justify-between mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                      🌐 Text (Language 2){" "}
+                      <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      className="px-2 py-1 text-xs bg-slate-700/40 border border-slate-600/40 rounded-lg text-white focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 transition-all duration-200"
+                      value={secondLanguage}
+                      onChange={(e) => setSecondLanguage(e.target.value)}
+                    >
+                      <option value="English">🇬🇧 English</option>
+                      <option value="Mandarin">🇨🇳 Mandarin</option>
+                      <option value="Arabic">🇸🇦 Arabic</option>
+                      <option value="Japanese">🇯🇵 Japanese</option>
+                      <option value="Korean">🇰🇷 Korean</option>
+                      <option value="French">🇫🇷 French</option>
+                      <option value="German">🇩🇪 German</option>
+                      <option value="Spanish">🇪🇸 Spanish</option>
+                      <option value="Thai">🇹🇭 Thai</option>
+                      <option value="Vietnamese">🇻🇳 Vietnamese</option>
+                    </select>
+                  </div>
+                  {isTranslating && (
+                    <span className="text-xs text-cyan-400 flex items-center gap-1 mt-1">
+                      <svg
+                        className="animate-spin h-3 w-3"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Translating...
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  placeholder="Auto-translated from Indonesian (or edit manually)"
+                  rows={4}
+                  className="px-4 py-2.5 bg-slate-700/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 resize-none"
+                  value={textSecond}
+                  onChange={(e) => setTextSecond(e.target.value)}
+                />
+              </div>
+
+              {/* Third Language Text with Dropdown and Toggle */}
+              <div className="flex flex-col h-full">
+                <div className="min-h-[52px] flex flex-col justify-start mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={enableThirdLanguage}
+                        onChange={(e) =>
+                          setEnableThirdLanguage(e.target.checked)
+                        }
+                        className="w-4 h-4 text-cyan-500 bg-slate-700 border-slate-600 rounded focus:ring-cyan-500"
+                      />
+                      🌐 Text (Language 3){" "}
+                      {enableThirdLanguage && (
+                        <span className="text-red-400">*</span>
+                      )}
+                    </label>
+                    {enableThirdLanguage && (
+                      <select
+                        className="px-2 py-1 text-xs bg-slate-700/40 border border-slate-600/40 rounded-lg text-white focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 transition-all duration-200"
+                        value={thirdLanguage}
+                        onChange={(e) => setThirdLanguage(e.target.value)}
+                      >
+                        <option value="Mandarin">🇨🇳 Mandarin</option>
+                        <option value="Arabic">🇸🇦 Arabic</option>
+                        <option value="Japanese">🇯🇵 Japanese</option>
+                        <option value="Korean">🇰🇷 Korean</option>
+                        <option value="French">🇫🇷 French</option>
+                        <option value="German">🇩🇪 German</option>
+                        <option value="Spanish">🇪🇸 Spanish</option>
+                        <option value="Thai">🇹🇭 Thai</option>
+                        <option value="Vietnamese">🇻🇳 Vietnamese</option>
+                        <option value="English">🇬🇧 English</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+                <textarea
+                  placeholder={
+                    enableThirdLanguage
+                      ? "Auto-translated from Indonesian (or edit manually)"
+                      : "Disabled - Enable checkbox to use"
+                  }
+                  rows={4}
+                  disabled={!enableThirdLanguage}
+                  className="px-4 py-2.5 bg-slate-700/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 focus:bg-slate-700/60 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={textThird}
+                  onChange={(e) => setTextThird(e.target.value)}
+                />
               </div>
             </div>
 
@@ -926,7 +1224,7 @@ const Home = () => {
                     Handler
                   </th>
                   <th className="text-left py-4 px-3 text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Message
+                    Message (ID)
                   </th>
                   <th className="text-left py-4 px-3 text-xs font-bold text-slate-300 uppercase tracking-wider">
                     Status
@@ -978,9 +1276,9 @@ const Home = () => {
                       <td className="py-4 px-3">
                         <div
                           className="text-slate-300 text-sm max-w-[200px] truncate"
-                          title={pag.free_text}
+                          title={pag.free_text.split(" | ")[0]}
                         >
-                          {pag.free_text}
+                          {pag.free_text.split(" | ")[0]}
                         </div>
                       </td>
                       <td className="py-4 px-3">

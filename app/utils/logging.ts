@@ -13,10 +13,14 @@ export interface PagingData {
 
 export async function logPagingOperation(data: PagingData) {
   try {
+    // Get current time in Indonesia timezone (WIB = UTC+7)
+    const now = new Date();
+    const indonesiaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // Add 7 hours for WIB
+    
     // Use type assertion to ensure the model exists
     const logEntry = await (prisma as unknown as {
       tb_paging_log: {
-        create: (args: { data: PagingData }) => Promise<unknown>;
+        create: (args: { data: PagingData & { last_update: Date } }) => Promise<unknown>;
       };
     }).tb_paging_log.create({
       data: {
@@ -25,7 +29,8 @@ export async function logPagingOperation(data: PagingData) {
         name_passenger: data.name_passenger,
         handle_by: data.handle_by,
         free_text: data.free_text,
-        status: data.status
+        status: data.status,
+        last_update: indonesiaTime
       }
     });
     console.log("Log entry created:", logEntry);

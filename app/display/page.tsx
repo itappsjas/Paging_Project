@@ -15,12 +15,21 @@ function PagingScreenContent() {
 
   const [sqCode, setSqCode] = useState("");
   const [names, setNames] = useState<string[]>([]);
-  const [freeText, setFreeText] = useState("");
+  const [freeText, setFreeText] = useState(""); // Format: "ID | LANG2" atau "ID | LANG2 | LANG3"
   const [handleBy, setHandleBy] = useState("Jas");
+  const [hasShowData, setHasShowData] = useState(false); // Track if there's data with status=1
   const [currentDate, setCurrentDate] = useState("Loading...");
   const [isClient, setIsClient] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [index, setIndex] = useState(0);
+  const [languageIndex, setLanguageIndex] = useState(0);
+
+  // Parse free_text to get languages (bisa 2 atau 3 bahasa)
+  const parsedTexts = freeText.split(" | ").filter((text) => text.trim());
+  const textIndonesia = parsedTexts[0] || "";
+  const textSecond = parsedTexts[1] || "";
+  const textThird = parsedTexts[2] || "";
+  const totalLanguages = parsedTexts.length; // Jumlah bahasa aktual (2 atau 3)
 
   // Define types for API response
   interface PagingItem {
@@ -47,6 +56,7 @@ function PagingScreenContent() {
       setSqCode(filtered[0].flight_no || "");
       setFreeText(filtered[0].free_text || "");
       setHandleBy(filtered[0].handle_by || "Jas");
+      setHasShowData(true); // Ada data dengan status=1 (SHOW)
       const passengerNames = filtered
         .flatMap((item: PagingItem) =>
           String(item.name_passenger || "").split(",")
@@ -69,6 +79,7 @@ function PagingScreenContent() {
         setHandleBy("Jas");
       }
 
+      setHasShowData(false); // Tidak ada data dengan status=1 (NO SHOW)
       setSqCode("");
       setNames([]);
     }
@@ -129,7 +140,7 @@ function PagingScreenContent() {
   useEffect(() => {
     // Reset currentPage saat names berubah
     setCurrentPage(0);
-    
+
     // Jika kurang dari atau sama dengan 5, tidak perlu pagination
     if (names.length <= 5) {
       return;
@@ -137,7 +148,7 @@ function PagingScreenContent() {
 
     // Hitung total halaman: setiap halaman 5 passenger
     const totalPages = Math.ceil(names.length / 5);
-    
+
     // Pastikan ada lebih dari 1 halaman untuk pagination
     if (totalPages <= 1) {
       return;
@@ -154,13 +165,26 @@ function PagingScreenContent() {
     return () => clearInterval(intervalId);
   }, [names.length]);
 
-  // Language switch animation
+  // Language switch animation for header (2 languages: EN and ID)
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % 2);
     }, 6000);
     return () => clearInterval(interval);
   }, []);
+
+  // Language switch animation for free text (dinamis: 2 atau 3 bahasa)
+  useEffect(() => {
+    if (totalLanguages < 2) return; // Minimal harus ada 2 bahasa
+
+    // Reset languageIndex jika melebihi jumlah bahasa
+    setLanguageIndex((prev) => (prev >= totalLanguages ? 0 : prev));
+
+    const interval = setInterval(() => {
+      setLanguageIndex((prev) => (prev + 1) % totalLanguages);
+    }, 5000); // Change language every 5 seconds
+    return () => clearInterval(interval);
+  }, [totalLanguages]);
 
   // Header titles that will animate/change
   const headerTexts = useMemo(
@@ -175,7 +199,7 @@ function PagingScreenContent() {
               &thinsp; / {isClient ? currentDate : ""} 
             </span> */}
             <span className="whitespace-nowrap flex justify-center items-center">
-              The Following Passenger(s) of 
+              The Following Passenger(s) of
             </span>
           </>
         ),
@@ -190,7 +214,7 @@ function PagingScreenContent() {
               {isClient ? currentDate : ""} 
             </span> */}
             <span className="whitespace-nowrap flex justify-center items-center">
-              Penumpang Berikut Dari 
+              Penumpang Berikut Dari
             </span>
           </>
         ),
@@ -202,32 +226,30 @@ function PagingScreenContent() {
   // Get current page passengers (maksimal 5 per halaman)
   const getCurrentPagePassengers = () => {
     if (names.length === 0) return [];
-    
+
     // Jika total <= 5, tampilkan semua
     if (names.length <= 5) return names;
-    
+
     // Hitung total halaman (setiap halaman 5 passenger)
     const totalPages = Math.ceil(names.length / 5);
-    
+
     // Pastikan currentPage valid (0 sampai totalPages-1)
     const safeCurrentPage = Math.max(0, Math.min(currentPage, totalPages - 1));
-    
+
     // Hitung index untuk slice: setiap halaman 5 passenger
     const startIndex = safeCurrentPage * 5;
     const endIndex = startIndex + 5; // Ambil 5 passenger per halaman
-    
+
     // Ambil 5 passenger untuk halaman ini
     const result = names.slice(startIndex, endIndex);
-    
+
     // Safety check: jika hasil kosong (seharusnya tidak terjadi), kembali ke halaman pertama
     if (result.length === 0 && names.length > 0) {
       return names.slice(0, 5);
     }
-    
+
     return result;
   };
-
-  
 
   return (
     <div
@@ -235,7 +257,7 @@ function PagingScreenContent() {
       style={{
         background:
           "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7))",
-          // "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7)), url(/airport_building.png)",
+        // "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7)), url(/airport_building.png)",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -304,9 +326,7 @@ function PagingScreenContent() {
               ></div>
 
               {/* InJourney Logo in center of triangle area */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 left-8 w-80 h-32 overflow-hidden"
-              >
+              <div className="absolute top-1/2 -translate-y-1/2 left-8 w-80 h-32 overflow-hidden">
                 <div className="relative w-full h-full">
                   <Image
                     src="/Logo_Injourney.png"
@@ -325,7 +345,9 @@ function PagingScreenContent() {
 
         {/* Flight Information Section */}
         <div
-          className={`flex-1 flex ${names.length > 0 ? "items-start" : "items-center"} justify-center px-4 pt-4 pb-16`}
+          className={`flex-1 flex ${
+            names.length > 0 ? "items-start" : "items-center"
+          } justify-center px-4 pt-4 pb-16`}
         >
           <div className="w-full">
             {/* Flight Data Table - No Card */}
@@ -355,8 +377,7 @@ function PagingScreenContent() {
                           />
                         </div>
                       </div>
-                      /
-                      <span className="inline-block">{sqCode}</span>
+                      /<span className="inline-block">{sqCode}</span>
                     </div>
                   </div>
                 </div>
@@ -410,102 +431,129 @@ function PagingScreenContent() {
                 </div>
               </div>
             ) : freeText ? (
-              <div className="w-full flex items-center justify-center -mt-6 md:-mt-8">
-                <div className="relative w-full max-w-7xl flex justify-center">
-                  <div className="absolute -inset-1 bg-gradient-to-br from-white/10 via-blue-300/5 to-white/10 rounded-xl blur-md"></div>
-                  <div
-                    className="relative p-10 rounded-xl bg-black/10 backdrop-blur-sm border border-white/20 w-full mx-auto flex items-center justify-center"
-                    style={{ minHeight: "450px" }}
-                  >
-                    <div className="flex flex-col items-center justify-center w-full h-full text-white text-center">
-                      <TextType
-                        text={freeText}
-                        typingSpeed={100}
-                        pauseDuration={2000}
-                        deletingSpeed={50}
-                        showCursor={true}
-                        cursorCharacter="|"
-                        loop={true}
-                        noDelete={true}
-                        className="text-6xl font-bold text-white whitespace-pre-line"
-                      />
-                    </div>
-                  </div>
-                  <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-white/30 rounded-tl-xl"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-white/30 rounded-tr-xl"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-l-2 border-b-2 border-white/30 rounded-bl-xl"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-white/30 rounded-br-xl"></div>
-                </div>
+              <div className="w-full flex flex-col items-center justify-center px-8 gap-8">
+                {/* Text Content */}
+                <ClientOnly>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={languageIndex}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="w-full flex items-center justify-center"
+                    >
+                      {languageIndex === 0 && textIndonesia && (
+                        <div
+                          className={`font-bold text-white text-center whitespace-pre-line ${
+                            textIndonesia.length <= 20
+                              ? "text-9xl"
+                              : textIndonesia.length <= 50
+                              ? "text-8xl"
+                              : textIndonesia.length <= 100
+                              ? "text-7xl"
+                              : "text-6xl"
+                          }`}
+                        >
+                          {textIndonesia}
+                        </div>
+                      )}
+                      {languageIndex === 1 && textSecond && (
+                        <div
+                          className={`font-bold text-white text-center whitespace-pre-line ${
+                            textSecond.length <= 20
+                              ? "text-9xl"
+                              : textSecond.length <= 50
+                              ? "text-8xl"
+                              : textSecond.length <= 100
+                              ? "text-7xl"
+                              : "text-6xl"
+                          }`}
+                        >
+                          {textSecond}
+                        </div>
+                      )}
+                      {languageIndex === 2 &&
+                        textThird &&
+                        totalLanguages >= 3 && (
+                          <div
+                            className={`font-bold text-white text-center whitespace-pre-line ${
+                              textThird.length <= 20
+                                ? "text-9xl"
+                                : textThird.length <= 50
+                                ? "text-8xl"
+                                : textThird.length <= 100
+                                ? "text-7xl"
+                                : "text-6xl"
+                            }`}
+                          >
+                            {textThird}
+                          </div>
+                        )}
+                    </motion.div>
+                  </AnimatePresence>
+                </ClientOnly>
               </div>
             ) : (
-              <div className="w-full flex items-center justify-center -mt-6 md:-mt-8">
-                <div className="relative w-full max-w-7xl flex justify-center">
-                  <div className="absolute -inset-1 bg-gradient-to-br from-white/10 via-blue-300/5 to-white/10 rounded-xl blur-md"></div>
-                  <div
-                    className="relative p-10 rounded-xl bg-black/10 backdrop-blur-sm border border-white/20 w-full mx-auto flex items-center justify-center"
-                    style={{ minHeight: "450px" }}
-                  >
-                    <div className="flex flex-col items-center justify-center w-full h-full text-white text-center">
-                      <TextType
-                        text={"NO FLIGHT INFORMATION"}
-                        typingSpeed={100}
-                        pauseDuration={2000}
-                        deletingSpeed={50}
-                        showCursor={true}
-                        cursorCharacter="|"
-                        loop={true}
-                        noDelete={true}
-                        className="text-6xl font-bold text-white"
-                      />
-                    </div>
-                  </div>
-                  <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-white/30 rounded-tl-xl"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-white/30 rounded-tr-xl"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-l-2 border-b-2 border-white/30 rounded-bl-xl"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-white/30 rounded-br-xl"></div>
+              <div className="w-full flex items-center justify-center">
+                <div className="text-8xl font-bold text-white text-center">
+                  NO FLIGHT INFORMATION
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Static bilingual notice above running text */}
-        <div className="fixed bottom-20 left-0 right-0 py-5">
-          <div className="w-full flex items-center justify-center">
-            <ClientOnly>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`notice-${index}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.4 }}
-                  className="flex items-center justify-center"
-                >
-                  {index === 0 ? (
-                    <div className="flex items-center gap-6">
-                      <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
-                        Please Approach Baggage Service {handleBy.toUpperCase() || "JAS"}
-                      </span>
-                      <div className="relative w-40 h-16">
-                        <Image src={handlerLogoSrc} alt="Handler Logo" fill className="object-contain" />
+        {/* Static bilingual notice - Only show when status=1 (SHOW) */}
+        {hasShowData && (
+          <div className="fixed bottom-20 left-0 right-0 py-5">
+            <div className="w-full flex items-center justify-center">
+              <ClientOnly>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {index === 0 ? (
+                      <div className="flex items-center gap-6">
+                        <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
+                          Please Approach Baggage Service{" "}
+                          {handleBy.toUpperCase() || "JAS"}
+                        </span>
+                        <div className="relative w-40 h-16">
+                          <Image
+                            src={handlerLogoSrc}
+                            alt="Handler Logo"
+                            fill
+                            className="object-contain"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-6">
-                      <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
-                        Harap Menuju Layanan Bagasi {handleBy.toUpperCase() || "JAS"}
-                      </span>
-                      <div className="relative w-40 h-16">
-                        <Image src={handlerLogoSrc} alt="Handler Logo" fill className="object-contain" />
+                    ) : (
+                      <div className="flex items-center gap-6">
+                        <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
+                          Harap Menuju Layanan Bagasi{" "}
+                          {handleBy.toUpperCase() || "JAS"}
+                        </span>
+                        <div className="relative w-40 h-16">
+                          <Image
+                            src={handlerLogoSrc}
+                            alt="Handler Logo"
+                            fill
+                            className="object-contain"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </ClientOnly>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </ClientOnly>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Running Text Footer */}
         <div className="fixed bottom-0 left-0 right-0 z-50 py-4 overflow-hidden bg-blue-200/80 backdrop-blur-sm border-t border-white/30">
@@ -579,5 +627,5 @@ export default function PagingScreen() {
     >
       <PagingScreenContent />
     </Suspense>
-  );
+  );
 }
