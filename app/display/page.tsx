@@ -258,12 +258,24 @@ function PagingScreenContent() {
         background:
           "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7))",
         // "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7)), url(/airport_building.png)",
-        backgroundSize: "cover",
+        backgroundSize: "contain",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         backgroundAttachment: "fixed",
       }}
     >
+         {/* Background image with contrast overlay */}
+         <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: "url(/bckap.jpg)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          filter: "contrast(1.2)",
+          opacity: 0.5,
+        }}
+      ></div>
       {/* Background overlay for better text readability */}
       <div className="absolute inset-0 bg-gradient-to-b from-blue-600/30 via-blue-500/20 to-blue-100/30"></div>
 
@@ -320,7 +332,7 @@ function PagingScreenContent() {
                 className="w-80 h-full opacity-60"
                 style={{
                   background:
-                    "linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.3) 100%)",
+                    "linear-gradient(45deg, rgb(255, 255, 255) 0%, rgb(255, 255, 255) 100%)",
                   clipPath: "polygon(0% 100%, 30% 0%, 100% 0%, 100% 100%)",
                 }}
               ></div>

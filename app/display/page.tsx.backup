@@ -17,10 +17,10 @@ function PagingScreenContent() {
   const [names, setNames] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
   const [handleBy, setHandleBy] = useState("Jas");
-  const [currentTime, setCurrentTime] = useState("00:00");
   const [currentDate, setCurrentDate] = useState("Loading...");
   const [isClient, setIsClient] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [index, setIndex] = useState(0);
 
   // Define types for API response
   interface PagingItem {
@@ -74,6 +74,16 @@ function PagingScreenContent() {
     }
   }, [beltNo]);
 
+  // Decide handler logo (JAS vs GAPURA) based on handleBy from data
+  const { handlerLogoSrc, isGapuraHandler } = useMemo(() => {
+    const normalizedHandler = (handleBy || "").toLowerCase();
+    const isGapura = normalizedHandler.includes("gapura");
+    return {
+      handlerLogoSrc: isGapura ? "/Logo_Gapura.png" : "/Logo_JAS.png",
+      isGapuraHandler: isGapura,
+    };
+  }, [handleBy]);
+
   // Fetch sekali ketika beltNo berubah
   useEffect(() => {
     fetchData();
@@ -92,12 +102,6 @@ function PagingScreenContent() {
   // Function to update time and date
   const updateTimeAndDate = () => {
     const now = new Date();
-    setCurrentTime(
-      now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    );
     setCurrentDate(
       now.toLocaleDateString("en-ID", {
         day: "numeric",
@@ -121,27 +125,109 @@ function PagingScreenContent() {
     };
   }, [beltNo, fetchData]);
 
-  // Auto-change untuk passenger names (maksimal 4 per halaman)
+  // Auto-change untuk passenger names (5 per halaman)
   useEffect(() => {
-    if (names.length <= 4) {
-      setCurrentPage(0);
+    // Reset currentPage saat names berubah
+    setCurrentPage(0);
+    
+    // Jika kurang dari atau sama dengan 5, tidak perlu pagination
+    if (names.length <= 5) {
       return;
     }
 
-    const totalPages = Math.ceil(names.length / 4);
+    // Hitung total halaman: setiap halaman 5 passenger
+    const totalPages = Math.ceil(names.length / 5);
+    
+    // Pastikan ada lebih dari 1 halaman untuk pagination
+    if (totalPages <= 1) {
+      return;
+    }
+
     const intervalId = setInterval(() => {
-      setCurrentPage((prev) => (prev + 1) % totalPages);
+      setCurrentPage((prev) => {
+        // Maju ke halaman berikutnya, jika sudah di halaman terakhir, kembali ke 0
+        const nextPage = (prev + 1) % totalPages;
+        return nextPage;
+      });
     }, 5000); // ganti halaman setiap 5 detik
 
     return () => clearInterval(intervalId);
   }, [names.length]);
 
-  // Get current page passengers
+  // Language switch animation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % 2);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Header titles that will animate/change
+  const headerTexts = useMemo(
+    () => [
+      {
+        id: 1,
+        title: "ATTENTION",
+        description: (
+          <>
+            {/* <span className="whitespace-nowrap flex justify-center items-center">
+              The Following Passenger(s) of &thinsp;<strong>{sqCode}</strong>
+              &thinsp; / {isClient ? currentDate : ""} 
+            </span> */}
+            <span className="whitespace-nowrap flex justify-center items-center">
+              The Following Passenger(s) of 
+            </span>
+          </>
+        ),
+      },
+      {
+        id: 2,
+        title: "PERHATIAN",
+        description: (
+          <>
+            {/* <span className="whitespace-nowrap flex justify-center items-center">
+              Penumpang Berikut Dari &thinsp;<strong>{sqCode}</strong>&thinsp; /{" "}
+              {isClient ? currentDate : ""} 
+            </span> */}
+            <span className="whitespace-nowrap flex justify-center items-center">
+              Penumpang Berikut Dari 
+            </span>
+          </>
+        ),
+      },
+    ],
+    [sqCode, isClient, currentDate]
+  );
+
+  // Get current page passengers (maksimal 5 per halaman)
   const getCurrentPagePassengers = () => {
-    if (names.length <= 4) return names;
-    const startIndex = currentPage * 4;
-    return names.slice(startIndex, startIndex + 4);
+    if (names.length === 0) return [];
+    
+    // Jika total <= 5, tampilkan semua
+    if (names.length <= 5) return names;
+    
+    // Hitung total halaman (setiap halaman 5 passenger)
+    const totalPages = Math.ceil(names.length / 5);
+    
+    // Pastikan currentPage valid (0 sampai totalPages-1)
+    const safeCurrentPage = Math.max(0, Math.min(currentPage, totalPages - 1));
+    
+    // Hitung index untuk slice: setiap halaman 5 passenger
+    const startIndex = safeCurrentPage * 5;
+    const endIndex = startIndex + 5; // Ambil 5 passenger per halaman
+    
+    // Ambil 5 passenger untuk halaman ini
+    const result = names.slice(startIndex, endIndex);
+    
+    // Safety check: jika hasil kosong (seharusnya tidak terjadi), kembali ke halaman pertama
+    if (result.length === 0 && names.length > 0) {
+      return names.slice(0, 5);
+    }
+    
+    return result;
   };
+
+  
 
   return (
     <div
@@ -149,13 +235,25 @@ function PagingScreenContent() {
       style={{
         background:
           "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7))",
-          // "linear-gradient(rgba(147, 197, 253, 0.7), rgba(147, 197, 253, 0.7)), url(/airport_building.png)",
-        backgroundSize: "cover",
+        backgroundSize: "contain",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         backgroundAttachment: "fixed",
       }}
     >
+      {/* Background image with contrast overlay */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: "url(/background_ap3.png)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          filter: "contrast(1.2)",
+          opacity: 0.5,
+        }}
+      ></div>
+      
       {/* Background overlay for better text readability */}
       <div className="absolute inset-0 bg-gradient-to-b from-blue-600/30 via-blue-500/20 to-blue-100/30"></div>
 
@@ -174,6 +272,33 @@ function PagingScreenContent() {
             </div>
           </div>
 
+          {/* Center - ATTENTION/PERHATIAN */}
+          {beltNo && sqCode && names.length > 0 && (
+            <div className="absolute left-1/2 transform -translate-x-1/2 top-8">
+              <ClientOnly>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <h1 className="text-6xl font-extrabold text-white drop-shadow-lg mb-2 text-center">
+                      {headerTexts[index].title}
+                    </h1>
+                    <p
+                      className="text-5xl text-white text-center"
+                      suppressHydrationWarning
+                    >
+                      {headerTexts[index].description}
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
+              </ClientOnly>
+            </div>
+          )}
+
           {/* Right - Airport Building Graphic */}
           <div
             className="absolute top-0 right-0"
@@ -185,20 +310,23 @@ function PagingScreenContent() {
                 className="w-80 h-full opacity-60"
                 style={{
                   background:
-                    "linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.3) 100%)",
+                    "linear-gradient(45deg, rgb(255, 255, 255) 0%, rgb(255, 255, 255) 100%)",
                   clipPath: "polygon(0% 100%, 30% 0%, 100% 0%, 100% 100%)",
                 }}
               ></div>
 
-              {/* JAS Logo in center of triangle area */}
-              <div className="absolute top-1/3 right-10">
-                <Image
-                  src="/Logo_JAS.png"
-                  alt="JAS Airways Logo"
-                  width={180}
-                  height={90}
-                  className="object-contain"
-                />
+              {/* InJourney Logo in center of triangle area */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 left-8 w-80 h-32 overflow-hidden"
+              >
+                <div className="relative w-full h-full">
+                  <Image
+                    src="/Logo_Injourney.png"
+                    alt="InJourney Logo"
+                    fill
+                    className="object-contain p-2"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -208,21 +336,40 @@ function PagingScreenContent() {
         <div className="w-full border-t-2 border-white/30 -mt-2"></div>
 
         {/* Flight Information Section */}
-        <div className="flex-1 flex items-start justify-center px-4 pt-8">
+        <div
+          className={flex-1 flex ${names.length > 0 ? "items-start" : "items-center"} justify-center px-4 pt-4 pb-16}
+        >
           <div className="w-full">
             {/* Flight Data Table - No Card */}
             {names.length > 0 ? (
               <div className="w-full">
                 {/* Table Header */}
-                <div className="flex items-center py-8 mb-2 px-12">
-                  <div className="w-48 flex items-center justify-start">
-                    <div className="text-6xl font-bold text-white">AIRLINE</div>
+                <div className="flex items-center py-2 mb-1 px-12">
+                  {/* <div className="w-64 flex items-center justify-start">
+                    <div className="text-7xl font-bold text-white">AIRLINE</div>
                   </div>
-                  <div className="text-6xl font-bold text-white flex-1 text-center">
+                  <div className="text-7xl font-bold text-white flex-1 text-center">
                     FLIGHT
-                  </div>
+                  </div> */}
                   <div className="text-6xl font-bold text-white flex-1 text-center">
-                    PASSENGER
+                    <div className="flex items-center justify-center gap-8">
+                      <div className="bg-white/0 w-56 h-28 flex items-center justify-center">
+                        <div className="relative w-full h-full p-3 flex items-center justify-center">
+                          <Image
+                            src={/airline/${sqCode.substring(0, 2)}.png}
+                            alt={${sqCode.substring(0, 2)} Logo}
+                            fill
+                            className="object-contain object-center"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                            }}
+                          />
+                        </div>
+                      </div>
+                      /
+                      <span className="inline-block">{sqCode}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -238,31 +385,34 @@ function PagingScreenContent() {
                     >
                       {getCurrentPagePassengers().map((name, idx) => (
                         <div
-                          key={`${currentPage}-${idx}`}
+                          key={${currentPage}-${idx}}
                           className="flex items-center py-6 px-12"
                         >
                           {/* Airline Logo */}
-                          <div className="w-48 flex items-center justify-start">
-                            <Image
-                              src={`/airline/${sqCode.substring(0, 2)}.png`}
-                              alt={`${sqCode.substring(0, 2)} Logo`}
-                              width={180}
-                              height={90}
-                              className="object-contain"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                              }}
-                            />
-                          </div>
+                          {/* <div className="w-64 flex items-center justify-center">
+                            <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg border border-white/20 w-56 h-28 flex items-center justify-center">
+                              <div className="relative w-full h-full p-3 flex items-center justify-center">
+                                <Image
+                                  src={/airline/${sqCode.substring(0, 2)}.png}
+                                  alt={${sqCode.substring(0, 2)} Logo}
+                                  fill
+                                  className="object-contain object-center"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = "none";
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div> */}
 
                           {/* Flight Number */}
-                          <div className="text-6xl font-bold text-white flex-1 text-center">
+                          {/* <div className="text-7xl font-bold text-white flex-1 text-center">
                             {sqCode}
-                          </div>
+                          </div> */}
 
                           {/* Passenger Name */}
-                          <div className="text-6xl font-medium text-white flex-1 text-center">
+                          <div className="text-7xl font-bold text-white w-full max-w-xl mx-auto text-left whitespace-nowrap">
                             {name}
                           </div>
                         </div>
@@ -272,32 +422,103 @@ function PagingScreenContent() {
                 </div>
               </div>
             ) : freeText ? (
-              <div className="absolute inset-0 flex items-center justify-center pt-28">
-                <div className="text-center">
-                  <TextType
-                    text={freeText}
-                    typingSpeed={100}
-                    pauseDuration={2000}
-                    deletingSpeed={50}
-                    showCursor={true}
-                    cursorCharacter="|"
-                    loop={true}
-                    noDelete={true}
-                    className="text-6xl font-bold text-white"
-                  />
+              <div className="w-full flex items-center justify-center -mt-6 md:-mt-8">
+                <div className="relative w-full max-w-7xl flex justify-center">
+                  <div className="absolute -inset-1 bg-gradient-to-br from-white/10 via-blue-300/5 to-white/10 rounded-xl blur-md"></div>
+                  <div
+                    className="relative p-10 rounded-xl bg-black/10 backdrop-blur-sm border border-white/20 w-full mx-auto flex items-center justify-center"
+                    style={{ minHeight: "450px" }}
+                  >
+                    <div className="flex flex-col items-center justify-center w-full h-full text-white text-center">
+                      <TextType
+                        text={freeText}
+                        typingSpeed={100}
+                        pauseDuration={2000}
+                        deletingSpeed={50}
+                        showCursor={true}
+                        cursorCharacter="|"
+                        loop={true}
+                        noDelete={true}
+                        className="text-6xl font-bold text-white whitespace-pre-line"
+                      />
+                    </div>
+                  </div>
+                  <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-white/30 rounded-tl-xl"></div>
+                  <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-white/30 rounded-tr-xl"></div>
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-l-2 border-b-2 border-white/30 rounded-bl-xl"></div>
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-white/30 rounded-br-xl"></div>
                 </div>
               </div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center pt-28">
-                <div className="text-center">
-                  <div className="text-6xl font-bold text-white">
-                    NO FLIGHT INFORMATION
+              <div className="w-full flex items-center justify-center -mt-6 md:-mt-8">
+                <div className="relative w-full max-w-7xl flex justify-center">
+                  <div className="absolute -inset-1 bg-gradient-to-br from-white/10 via-blue-300/5 to-white/10 rounded-xl blur-md"></div>
+                  <div
+                    className="relative p-10 rounded-xl bg-black/10 backdrop-blur-sm border border-white/20 w-full mx-auto flex items-center justify-center"
+                    style={{ minHeight: "450px" }}
+                  >
+                    <div className="flex flex-col items-center justify-center w-full h-full text-white text-center">
+                      <TextType
+                        text={"NO FLIGHT INFORMATION"}
+                        typingSpeed={100}
+                        pauseDuration={2000}
+                        deletingSpeed={50}
+                        showCursor={true}
+                        cursorCharacter="|"
+                        loop={true}
+                        noDelete={true}
+                        className="text-6xl font-bold text-white"
+                      />
+                    </div>
                   </div>
+                  <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-white/30 rounded-tl-xl"></div>
+                  <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-white/30 rounded-tr-xl"></div>
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-l-2 border-b-2 border-white/30 rounded-bl-xl"></div>
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-white/30 rounded-br-xl"></div>
                 </div>
               </div>
             )}
           </div>
         </div>
+
+        {/* Static bilingual notice above running text - only show when there are passengers */}
+        {names.length > 0 && (
+          <div className="fixed bottom-20 left-0 right-0 py-5">
+            <div className="w-full flex items-center justify-center">
+              <ClientOnly>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {index === 0 ? (
+                      <div className="flex items-center gap-6">
+                        <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
+                          Please Approach Baggage Service {handleBy.toUpperCase() || "JAS"}
+                        </span>
+                        <div className="relative w-40 h-16">
+                          <Image src={handlerLogoSrc} alt="Handler Logo" fill className="object-contain" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-6">
+                        <span className="text-4xl md:text-5xl text-white font-medium whitespace-nowrap">
+                          Harap Menuju Layanan Bagasi {handleBy.toUpperCase() || "JAS"}
+                        </span>
+                        <div className="relative w-40 h-16">
+                          <Image src={handlerLogoSrc} alt="Handler Logo" fill className="object-contain" />
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </ClientOnly>
+            </div>
+          </div>
+        )}
 
         {/* Running Text Footer */}
         <div className="fixed bottom-0 left-0 right-0 z-50 py-4 overflow-hidden bg-blue-200/80 backdrop-blur-sm border-t border-white/30">
@@ -308,7 +529,9 @@ function PagingScreenContent() {
                 PLEASE REPORT TO {handleBy?.toUpperCase() || "JAS"} BAGGAGE
                 SERVICES COUNTER{" "}
                 {beltNo
-                  ? `IN FRONT OF BELT 1`
+                  ? isGapuraHandler
+                    ? "IN FRONT OF BELT 2"
+                    : "IN FRONT OF BELT 1"
                   : "AT ARRIVAL HALL INFORMATION COUNTER"}{" "}
                 OR APPROACH OUR GROUND STAFF FOR ASSISTANCE
               </span>
@@ -319,7 +542,9 @@ function PagingScreenContent() {
                 HARAP MELAPOR KE KONTER LAYANAN BAGASI{" "}
                 {handleBy?.toUpperCase() || "JAS"}{" "}
                 {beltNo
-                  ? `DI DEPAN BELT 1`
+                  ? isGapuraHandler
+                    ? "DI DEPAN BELT 2"
+                    : "DI DEPAN BELT 1"
                   : "DI KONTER INFORMASI HALL KEDATANGAN"}{" "}
                 ATAU HUBUNGI STAF DARAT KAMI UNTUK BANTUAN
               </span>
@@ -330,7 +555,9 @@ function PagingScreenContent() {
                 PLEASE REPORT TO {handleBy?.toUpperCase() || "JAS"} BAGGAGE
                 SERVICES COUNTER{" "}
                 {beltNo
-                  ? `IN FRONT OF BELT 1`
+                  ? isGapuraHandler
+                    ? "IN FRONT OF BELT 2"
+                    : "IN FRONT OF BELT 1"
                   : "AT ARRIVAL HALL INFORMATION COUNTER"}{" "}
                 OR APPROACH OUR GROUND STAFF FOR ASSISTANCE
               </span>
@@ -339,7 +566,9 @@ function PagingScreenContent() {
                 HARAP MELAPOR KE KONTER LAYANAN BAGASI{" "}
                 {handleBy?.toUpperCase() || "JAS"}{" "}
                 {beltNo
-                  ? `DI DEPAN BELT 1`
+                  ? isGapuraHandler
+                    ? "DI DEPAN BELT 2"
+                    : "DI DEPAN BELT 1"
                   : "DI KONTER INFORMASI HALL KEDATANGAN"}{" "}
                 ATAU HUBUNGI STAF DARAT KAMI UNTUK BANTUAN
               </span>
@@ -363,5 +592,5 @@ export default function PagingScreen() {
     >
       <PagingScreenContent />
     </Suspense>
-  );
+  );
 }
